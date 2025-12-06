@@ -7,13 +7,15 @@ import java.nio.ByteBuffer;
 import java.nio.channels.*;
 import java.util.Iterator;
 import java.util.Scanner;
+import java.util.UUID;
 
 import org.apache.logging.log4j.*;
 import picocli.CommandLine;
 import picocli.CommandLine.Option;
 
 public class ChatClient implements Runnable {
-    private static final Logger logger = LogManager.getLogger(ChatClient.class);
+    private final Logger logger = LogManager.getLogger(ChatClient.class);
+    private String clientUuid ;
 
     @Option(names = {"-h", "--host"}, description = "Server host")
     private String host;
@@ -21,10 +23,16 @@ public class ChatClient implements Runnable {
     @Option(names = {"-p", "--port"}, description = "Server port")
     private Integer port;
 
+    @Option(names = {"-a", "--action"}, description = "Action")
+    private String action;
+
+    @Option(names = {"-c", "--chat"}, description = "Chat")
+    private String chat;
+
     @Option(names = {"-u", "--username"}, description = "Username")
     private String username;
 
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] args) {
         ChatClient client = new ChatClient();
         CommandLine cmd = new CommandLine(client);
         cmd.parseArgs(args);
@@ -33,27 +41,37 @@ public class ChatClient implements Runnable {
 
     @Override
     public void run() {
+        clientUuid = UUID.randomUUID().toString();
         try {
             Scanner scanner = new Scanner(System.in);
             if (host == null) {
                 System.out.print("Введите адрес сервера: ");
                 host = scanner.nextLine();
             }
+            // TODO: host validation
             if (port == null) {
                 System.out.print("Введите порт сервера: ");
-                while (!scanner.hasNextInt()) {
-                    System.out.print("Порт должен быть числом. Введите снова: ");
-                    scanner.next();
-                }
                 port = scanner.nextInt();
                 scanner.nextLine();
             }
+            // TODO: port validation
+            if (action == null) {
+                System.out.print("Введите действие с чатом: ");
+                action = scanner.nextLine();
+            }
+            // TODO: action validation (action.equals("create") || action.equals("connect"))
+            if (chat == null) {
+                System.out.print("Введите название чата: ");
+                chat = scanner.nextLine();
+            }
+            // TODO: chat validation (not empty and shorter then 50)
             if (username == null) {
                 System.out.print("Введите имя: ");
                 username = scanner.nextLine();
             }
+            // TODO: username validation (username.length() <= 50)
 
-            logger.info("Используемые параметры - Host: {}, Port: {}, Username: {}", host, port, username);
+            logger.info("(clientUuid = {}) Используемые параметры - Host: {}, Port: {}, Username: {}, Chat: {}, Action: {}", clientUuid, host, port, username, chat, action);
 
             Selector selector = Selector.open();
             SocketChannel clientChannel = SocketChannel.open();
@@ -63,41 +81,45 @@ public class ChatClient implements Runnable {
                 try {
                     clientChannel.connect(new InetSocketAddress(host, port));
                     clientChannel.register(selector, SelectionKey.OP_CONNECT);
-                    logger.info("Попытка подключения к {}:{}", host, port);
+                    logger.info("(clientUuid = {}) Попытка подключения к {}:{}", clientUuid, host, port);
                     break;
                 } catch (Exception e) {
                     System.out.println("Подключиться невозможно. Попробуйте снова.");
-                    logger.error("Ошибка подключения", e);
+                    logger.error("(clientUuid = {}) Ошибка подключения {}", clientUuid, e.getMessage());
                 }
             }
-
-            while (username.length() > 50) {
-                System.out.print("Имя должно иметь длину не более 50. Введите другое имя: ");
-                username = scanner.nextLine();
-            }
-            logger.info("Имя установлено: {}", username);
 
             BufferedReader console = new BufferedReader(new InputStreamReader(System.in));
 
             new Thread(() -> {
                 try {
+                    while (!clientChannel.isConnected()) {
+                        Thread.sleep(50);
+                    }
+
+                    clientChannel.write(ByteBuffer.wrap(action.getBytes()));
+                    logger.info("(clientUuid = {}) Действие для чата отправлено: {}", clientUuid, action);
+
+                    clientChannel.write(ByteBuffer.wrap(chat.getBytes()));
+                    logger.info("(clientUuid = {}) Имя чата отправлено: {}", clientUuid, chat);
+
                     while (true) {
                         String line = console.readLine();
                         if (line == null || line.isEmpty()) continue;
 
-                        if (line.length() > 200) {
+                        if (line.length() > 255) {
                             System.out.println("Сообщение слишком длинное.");
-                            logger.error("Слишком длинное сообщение ({} символов)", line.length());
+                            logger.error("(clientUuid = {}) Слишком длинное сообщение ({} символов)", clientUuid, line.length());
                             continue;
                         }
 
-                        String msg = "[" + username + "] " + line;
-                        ByteBuffer buffer = ByteBuffer.wrap(msg.getBytes());
+                        String message = "[" + username + "] " + line;
+                        ByteBuffer buffer = ByteBuffer.wrap(message.getBytes());
                         clientChannel.write(buffer);
-                        logger.info("Отправлено: {}", msg);
+                        logger.info("(clientUuid = {}) Отправлено: {}", clientUuid, message);
                     }
                 } catch (Exception e) {
-                    logger.error("Ошибка в потоке отправки", e);
+                    logger.error("(clientUuid = {}) Ошибка в потоке отправки {}", clientUuid, e.getMessage());
                 }
             }).start();
 
@@ -113,25 +135,25 @@ public class ChatClient implements Runnable {
                             SocketChannel sc = (SocketChannel) key.channel();
                             if (sc.isConnectionPending()) sc.finishConnect();
                             sc.register(selector, SelectionKey.OP_READ);
-                            logger.info("Клиент подключен к серверу.");
+                            logger.info("(clientUuid = {}) Клиент подключен к серверу.", clientUuid);
                         }
 
                         if (key.isReadable()) {
                             SocketChannel sc = (SocketChannel) key.channel();
-                            ByteBuffer buffer = ByteBuffer.allocate(1024);
+                            ByteBuffer buffer = ByteBuffer.allocate(256);
                             int read = sc.read(buffer);
                             if (read == -1) {
-                                logger.error("Соединение закрыто сервером.");
+                                logger.error("(clientUuid = {}) Соединение закрыто сервером.", clientUuid);
                                 sc.close();
                                 return;
                             }
                             buffer.flip();
                             String msg = new String(buffer.array(), 0, buffer.limit());
-                            logger.info("Получено: {}", msg.trim());
+                            logger.info("(clientUuid = {}) Получено: {}", clientUuid, msg.trim());
                             System.out.println(msg.trim());
                         }
                     } catch (Exception e) {
-                        logger.error("Ошибка обработки ключа", e);
+                        logger.error("(clientUuid = {}) Ошибка обработки ключа {}", clientUuid, e.getMessage());
                         key.cancel();
                         key.channel().close();
                     }
@@ -139,7 +161,7 @@ public class ChatClient implements Runnable {
             }
 
         } catch (Exception e) {
-            logger.error("Ошибка клиента", e);
+            logger.error("(clientUuid = {}) Ошибка клиента {}", clientUuid, e.getMessage());
         }
     }
 }
