@@ -1,4 +1,4 @@
-package ru;
+package ru.service;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -9,8 +9,8 @@ import org.apache.logging.log4j.*;
 import picocli.CommandLine;
 import picocli.CommandLine.Option;
 
-public class ChatServer implements Runnable {
-    private static final Logger logger = LogManager.getLogger(ChatServer.class);
+public class ServerService implements Runnable {
+    private static final Logger logger = LogManager.getLogger(ServerService.class);
     // key = chatName, val = chatSubs
     private static final Map<String, Set<SocketChannel>> chats = new HashMap<>();
     // key = client, val = action
@@ -22,7 +22,7 @@ public class ChatServer implements Runnable {
     private Integer port;
 
     public static void main(String[] args) {
-        ChatServer server = new ChatServer();
+        ServerService server = new ServerService();
         CommandLine cmd = new CommandLine(server);
         cmd.parseArgs(args);
         server.run();
