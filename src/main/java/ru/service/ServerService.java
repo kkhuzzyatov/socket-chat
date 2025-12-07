@@ -6,8 +6,6 @@ import java.nio.ByteBuffer;
 import java.nio.channels.*;
 import java.util.*;
 import org.apache.logging.log4j.*;
-import picocli.CommandLine;
-import picocli.CommandLine.Option;
 
 public class ServerService implements Runnable {
     private static final Logger logger = LogManager.getLogger(ServerService.class);
@@ -18,13 +16,26 @@ public class ServerService implements Runnable {
     // key = client, val = chatName
     private static final Map<SocketChannel, String> clientChats = new HashMap<>();
 
-    @Option(names = {"-p", "--port"}, description = "Port to start the server")
-    private Integer port;
+    private static Integer port;
 
     public static void main(String[] args) {
+        for (int i = 0; i < args.length; i++) {
+            switch (args[i]) {
+                case "-p":
+                case "--port":
+                    if (i + 1 < args.length) {
+                        try {
+                            port = Integer.parseInt(args[++i]);
+                        } catch (NumberFormatException e) {
+                            logger.error("Ошибка: порт должен быть числом");
+                        }
+                    }
+                    break;
+                default:
+                    logger.warn("Неизвестный аргумент: {}", args[i]);
+            }
+        }
         ServerService server = new ServerService();
-        CommandLine cmd = new CommandLine(server);
-        cmd.parseArgs(args);
         server.run();
     }
 
