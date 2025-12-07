@@ -1,18 +1,17 @@
 package ru.presentation;
 
+import java.io.InputStreamReader;
+import java.util.UUID;
+import java.util.function.Consumer;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
 import picocli.CommandLine;
 import picocli.CommandLine.Option;
 import ru.service.ClientService;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.util.Scanner;
-import java.util.UUID;
-
 public class ClientViewConsoleImpl implements Runnable {
-
     private final Logger logger = LogManager.getLogger(ClientViewConsoleImpl.class);
 
     private ClientService clientService;
@@ -43,64 +42,9 @@ public class ClientViewConsoleImpl implements Runnable {
     public void run() {
         clientUuid = UUID.randomUUID().toString();
         clientService = new ClientService(clientUuid);
-
-        Scanner scanner = new Scanner(System.in);
-
-        if (host == null) {
-            System.out.print("Введите адрес сервера: ");
-            host = scanner.nextLine();
-        }
-
-        if (port == null) {
-            System.out.print("Введите порт сервера: ");
-            port = Integer.parseInt(scanner.nextLine());
-        }
-
-        if (action == null) {
-            System.out.print("Введите действие (create/connect): ");
-            action = scanner.nextLine();
-        }
-
-        if (chat == null) {
-            System.out.print("Введите название чата: ");
-            chat = scanner.nextLine();
-        }
-
-        if (username == null) {
-            System.out.print("Введите имя пользователя: ");
-            username = scanner.nextLine();
-        }
-
-        logger.info(
-                "(clientUuid = {}) Host={}, Port={}, User={}, Chat={}, Action={}",
-                clientUuid, host, port, username, chat, action
-        );
-
-        clientService.connect(host, port);
-
-        new Thread(() -> {
-            try {
-                Thread.sleep(200);
-
-                clientService.sendAction(action);
-                clientService.sendChatName(chat);
-
-                BufferedReader console = new BufferedReader(new InputStreamReader(System.in));
-                while (true) {
-                    String line = console.readLine();
-                    if (line == null || line.isEmpty()) continue;
-
-                    if (line.length() > 255) {
-                        System.out.println("Сообщение слишком длинное.");
-                        continue;
-                    }
-
-                    clientService.sendMessage("[" + username + "] " + line);
-                }
-            } catch (Exception ignored) {
-            }
-        }).start();
-
-        clientService.listen();
+        Consumer<String> consumer = System.out::println;
+        InputStreamReader isr = new InputStreamReader(System.in);
+        clientService.run(isr, consumer, host, port, action, chat, username);
+        logger.info("Клиент с uuid - {} подключился с помощью консольного интерфейса.", clientUuid);
     }
 }
